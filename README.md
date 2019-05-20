@@ -4,6 +4,6 @@ So far I have only added the very basics, like piping and executing programs, bu
 
 ## Comming Soon
 + Better tab completion
-+ Redirecting output with to a file with >>
++ Being able to use pipes along with >>
 + Support for *
 + Scripting
