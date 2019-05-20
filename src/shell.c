@@ -10,6 +10,7 @@
 #include <signal.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <fcntl.h>
 
 int line_buffer_start_size;
 int token_buffer_size;
@@ -425,6 +426,120 @@ int pipe_launch(char **tokens)
  return 1;
 }
 
+int redirect_launch(char** tokens)
+{
+ int redirectPos = -1;
+ int pos = 0;
+ int append = 0;
+ int status;
+ 
+
+ while(tokens[pos] != NULL)
+ {
+  if (strcmp(tokens[pos],">>") == 0 )
+  {
+   append = 1;
+   if (redirectPos == -1)
+    redirectPos = pos;
+   else
+    return -1;
+  }
+  else if (strcmp(tokens[pos],">") == 0)
+  {
+   if (redirectPos == -1)
+    redirectPos = pos;
+   else
+    return -1; 
+  }
+  pos++;
+ }
+ 
+ if (redirectPos == -1 || tokens[redirectPos + 1] == NULL)
+  return -1;
+
+ int size = pos;
+ pos = 0;
+ char** args = malloc((redirectPos + 1) * sizeof(char**));
+ char** extra = malloc((size - redirectPos - 1) * sizeof(char**));
+ while(tokens[pos] != NULL)
+ {
+  if (pos < redirectPos)
+  {
+   args[pos] = strdup(tokens[pos]);
+  }
+  else if (pos == redirectPos)
+  {
+   args[pos] = NULL;
+  }
+  else if (pos > redirectPos + 1)
+  {
+   extra[pos - redirectPos - 2] = strdup(tokens[pos]);
+  }
+  pos++;
+ }
+
+ extra[pos - redirectPos - 2] = NULL;
+ 
+
+ pid_t pid, wpid;
+
+ pid = fork();
+ //what the child will do
+ if (pid == 0)
+ {
+  //get the file descripter and set up the file with its premmisions if needed
+  int file_desc;
+  if (append)
+   file_desc = open(tokens[redirectPos + 1], O_WRONLY | O_APPEND | O_CREAT, 0644);
+  else
+   file_desc = open(tokens[redirectPos + 1], O_WRONLY | O_TRUNC | O_CREAT, 0644);
+
+  
+  if (dup2(file_desc,1) < 0)
+  {
+   perror("dup2");
+   exit(-1);
+  }
+
+  close(file_desc);
+
+  if (execvp(args[0], args) == -1)
+  {
+   perror("error");
+  }
+  exit(-1);
+
+ }
+ else if (pid < 0) //error checking
+ {
+  perror("fork error");
+ }
+ else
+ {//what the parent will do
+  do 
+  {
+   wpid = waitpid(pid, &status, WUNTRACED);
+  }while (!WIFEXITED(status) && !WIFSIGNALED(status));
+  //add the extra stuff to the file
+  int file_desc = open(tokens[redirectPos + 1], O_WRONLY | O_APPEND | O_CREAT, 0644);
+  pos = 0;
+  while (extra[pos] != NULL)
+  {
+   write(file_desc, " ", 1);
+   write(file_desc, extra[pos], strlen(extra[pos]));
+
+   pos++;
+  }
+  write(file_desc, "\n", 1);
+
+  free(args);
+  free(extra);
+  close(file_desc);
+
+  return status;
+ }
+}
+
 int execute(char **tokens) 
 {
 
@@ -448,6 +563,10 @@ int execute(char **tokens)
    if (strcmp(tokens[pos],"|") == 0)
    {
     return pipe_launch(tokens);
+   }
+   else if (strcmp(tokens[pos],">") == 0 || strcmp(tokens[pos], ">>") == 0)
+   {
+    return redirect_launch(tokens);
    }
    pos++;
   }
