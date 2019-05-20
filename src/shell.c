@@ -7,6 +7,9 @@
 #include <string.h>
 #include <termios.h>
 #include <dirent.h>
+#include <signal.h>
+#include <sys/select.h>
+#include <sys/time.h>
 
 int line_buffer_start_size;
 int token_buffer_size;
@@ -16,6 +19,9 @@ char *cdir;
 char **cmdhist;
 int cmdhistsize;
 int cmdhistpos = -1;
+
+int intSigCount = 0;
+int executing = 0;
 
 static struct termios old, cus; //used for terminal stuff
 
@@ -52,6 +58,27 @@ void chk_alloc_str_mem(char **string, int posused, int *buffersize, int chunksiz
 }
 
 char** get_tokens(char *line);
+
+int is_ready(int fd) 
+{
+ fd_set fdset;
+ struct timeval timeout;
+ int ret;
+ FD_ZERO(&fdset);
+ FD_SET(fd, &fdset);
+ timeout.tv_sec = 0;
+ timeout.tv_usec = 0;
+ return select(1, &fdset, NULL, NULL, &timeout) == 1 ? 1 : 0;
+}
+
+void sigintHandler(int sig_num)
+{
+ if (!executing)
+ {
+  printf("\n^C\n");
+  intSigCount++;
+ }
+}
 
 char **get_files_in_dir(char* path)
 {
@@ -409,6 +436,10 @@ int execute(char **tokens)
  {
   cd(tokens[1]);
  }
+ else if (strcmp(tokens[0], "exit") == 0)
+ {
+  exit(0);
+ }
  else
  {
   int pos = 0;
@@ -518,9 +549,21 @@ char* read_line()
   int position = 0;
   while(1)
   {
+
+   //return nothing if ctrl c was pressed
+   if(intSigCount > 0)
+   {
+    free(buffer);
+    return "";
+   }
+
+   //check if there is nothing and continue (to prevent blocking on getchar())
+   if (is_ready(0) == 0)
+    continue;
+
    c = getchar();
 
-  //printf("%d", c);  
+      
    
    if (c == EOF || c == '\n')
    {
@@ -670,7 +713,7 @@ char* read_line()
       if (shift < 0)
        shift = 0;
       else
-      printf("\x1b[1C"); 
+       printf("\x1b[1C"); 
      }
      else if (direction == 68) //left was pressed
      {
@@ -678,7 +721,7 @@ char* read_line()
       if (shift > position)
        shift = position;
       else
-      printf("\b");
+       printf("\b");
      }
     }
    }
@@ -726,8 +769,10 @@ char* read_line()
      }
     }
    }
+   //realocate buffer
    chk_alloc_str_mem(&buffer, position, &line_buffer_size, line_buffer_start_size);
- 
+   //make sure that all the printfs actully display
+   fflush(stdout); 
   }
  
 }
@@ -739,17 +784,27 @@ void shell_loop()
  do {
   printf(cdir);
   printf(">");
+  fflush(stdout);
   char *line = read_line();
+  if (intSigCount == 0)
+  {
   add_to_hist(line);
   cmdhistpos = -1;
   char **tokens = get_tokens(line);
   
   tcsetattr(0, TCSANOW, &old);
+  executing = 1;
   int status = execute(tokens);
+  executing = 0;
   change_termios(0);
 
-  //free(line);
+   
   free(tokens);
+  }
+  else
+  {
+   intSigCount = 0;
+  }
  }while(1);
 
 }
@@ -757,11 +812,13 @@ void shell_loop()
 
 int main(int argc, char **argv)
 {
-
+ //Set up the buffer sizes
  line_buffer_start_size = 256;
  token_buffer_size = 64;
  small_token_buffer_size = 64;
  
+ //Make the signal handler the sigintHandler function
+ signal(SIGINT, sigintHandler);
  
  cdir = malloc(2048 * sizeof(char));
  cdir = getcwd(cdir,2048 * sizeof(char));
