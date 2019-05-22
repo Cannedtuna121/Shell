@@ -7,3 +7,6 @@ So far I have only added the very basics, like piping and executing programs, bu
 + Being able to use pipes along with >>
 + Support for *
 + Scripting
+
+## Known Issues (Fixes comming)
++ Memory leaks
