@@ -530,7 +530,6 @@ int redirect_launch(char** tokens)
 
    pos++;
   }
-  write(file_desc, "\n", 1);
 
   free(args);
   free(extra);
@@ -600,11 +599,11 @@ char** get_tokens(char *line)
  do 
   {
   c = line[line_position];
-  line_position++;
-  if (c == '"')
+  line_position++; //makes it so we can easily check the next charecter without having to remeber to add a + 1 to line position when we check
+  if (c == '"') //noticing quotations
   {
    in_quotations = !in_quotations;
-  } 
+  } //spliting to a new token if there is a space
   else if ((c == ' ' && !in_quotations) || c == '\0')
   {
    if (strcmp(token,"") != 0 && token[0]!='\0')
@@ -617,7 +616,39 @@ char** get_tokens(char *line)
     token_position = 0;
    }
   }
-  else if (c == '|' && !in_quotations)
+  else if (c == '>' && !in_quotations) //recognizing redirection as tokens
+  {
+   token[token_position] = '\0';
+   if (strcmp(token, "") != 0)
+   {
+    tokens[tokens_position] = token;
+    tokens_position++;
+    chk_alloc_strar_mem(&tokens, tokens_position, &bufsize, token_buffer_size);
+   }
+
+   small_token_bufsize = small_token_buffer_size;
+   token = malloc(sizeof(char) * small_token_bufsize);
+   token_position = 0;
+   
+   if (line[line_position] == '>')
+   {
+    token[0] = '>';
+    token[1] = '>';
+    token[2] = '\0';
+    line_position++;
+   }
+   else
+   {
+    token[0] = '>';
+    token[1] = '\0';   
+   }
+   tokens[tokens_position] = token;
+   tokens_position++;
+   token = malloc(sizeof(char) * small_token_bufsize);
+   token[0] = '\0';
+
+  }
+  else if (c == '|' && !in_quotations) //recognizing pipes as tokens
   {
    token[token_position] = '\0';
    if (strcmp(token, "") != 0)
@@ -637,12 +668,13 @@ char** get_tokens(char *line)
    token = malloc(sizeof(char) * small_token_bufsize);
    token[0] = '\0';
   }
-  else
+  else //adding the chars into the tokens
   {
    token[token_position] = c;
    token_position++;
   }
-
+  
+  //realocating memory if needed
   chk_alloc_str_mem(&token, token_position, &small_token_bufsize, small_token_buffer_size);
 
   chk_alloc_strar_mem(&tokens, tokens_position, &bufsize, token_buffer_size);
@@ -650,6 +682,7 @@ char** get_tokens(char *line)
 
   
  }while(c != '\0'); 
+ //putting a null terminator on the tokens array
  tokens[tokens_position] = NULL;
 
 
