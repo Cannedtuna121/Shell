@@ -668,6 +668,32 @@ char** get_tokens(char *line)
    token = malloc(sizeof(char) * small_token_bufsize);
    token[0] = '\0';
   }
+  else if (!in_quotations && c == '!' && line[line_position] == '!')
+  {
+   token[token_position] = '\0';
+   if (strcmp(token, "") != 0)
+   {
+    tokens[tokens_position] = token;
+    tokens_position++;
+    chk_alloc_strar_mem(&tokens, tokens_position, &bufsize, token_buffer_size);
+   }
+
+   //reget the old tokens and put them inside the new ones if we can
+   if (cmdhist[1] != NULL && strstr(cmdhist[1], "!") == NULL)
+   {
+    char** old_tokens = get_tokens(cmdhist[1]);
+    int old_pos = 0;
+    while(old_tokens[old_pos] != NULL)
+    {
+    tokens[tokens_position] = old_tokens[old_pos];
+    tokens_position++;
+    old_pos++;
+    }
+   }
+
+   line_position++; //move past the !!
+
+  }
   else //adding the chars into the tokens
   {
    token[token_position] = c;
