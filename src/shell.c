@@ -94,18 +94,22 @@ char **get_files_in_dir(char* path)
  char** files = malloc(64 * sizeof(char*));
  int bufsize = 64;
  int pos = 0;
- //printf("%s:\n", path);
+
  while((de=readdir(dr)) != NULL)
  {
   files[pos] = strdup(de->d_name);
-  //printf("    %s    ", files[pos]);
   pos++;
   chk_alloc_strar_mem(&files, pos, &bufsize, 64);
  }
+
  files[pos] = NULL;
  closedir(dr);
- //printf("\n---------------------------------------\n");
  return files; 
+}
+
+char *get_tab_search(char* token)
+{
+ return strrchr(token, '/') + 1;
 }
 
 char *get_last_token(char* line)
@@ -149,9 +153,33 @@ int swap_last_token(char** line, char* tok)
   chk_alloc_str_mem(&nline, linepos, &bufsize, line_buffer_start_size);
  pos++;
  }
+ if (nline[linepos - 2] == '/')
+ {
+  nline[linepos - 1] = '\0';
+ }
+ else
+ {
  nline[linepos] = '\0';
+ }
  *line = nline;
  return bufsize;
+}
+
+char *get_search_dir(char *token)
+{
+ int index = strrchr(token, '/') - token;
+ char* search_dir = malloc(index + 2);
+ int pos = 0;
+ while (pos <= index)
+ {
+  search_dir[pos] = token[pos];
+  pos++;
+ }
+ search_dir[pos] = '\0';
+ 
+ return search_dir;
+
+ 
 }
 
 int get_auto_line(char** line)
@@ -159,13 +187,59 @@ int get_auto_line(char** line)
  if (*line[0] == '\0') //make sure there is actully something typed
   return strlen(*line);
  char *token = get_last_token(*line);
- char **files = get_files_in_dir(cdir);
+
+ char *search_string = strdup(token); //used to define the current search term
+ char *search_dir = strdup(cdir); //used to define the current search directory context
+
+ int search_type = 0; // will be set to one if it is a local search or 2 if it is a root search.
+
+
+ if (strchr(token, '/') != NULL)
+ {
+  if (token[0] == '/')
+  {
+   search_dir = get_search_dir(token); //reasign the search dir to the directory the user is in
+   search_type = 2;
+  }
+  else
+  {
+   char* sd = get_search_dir(token);
+   char* tdir = malloc(strlen(cdir) + strlen(sd) + 2);
+   int pos = 0;
+   while (cdir[pos] != '\0')
+   {
+    tdir[pos] = cdir[pos];
+    pos++;
+   }
+   tdir[pos] = '/';
+   pos++;
+   int endp = pos;
+   while(sd[pos - endp] != '\0')
+   {
+    tdir[pos] = sd[pos - endp];
+    pos++;
+   }
+   tdir[pos] = '\0';
+
+   search_dir = tdir;
+   search_type = 1;
+  }
+
+  search_string = get_tab_search(token); //reassign the search string when the user is looking into a different dir
+
+ }
+
+ char **files = get_files_in_dir(search_dir);
+ if (files == NULL)
+ {
+  return strlen(*line);
+ }
  int pos = 0;
  int matches = 0;
  char *match;
  while(files[pos] != NULL)
  {
-  if (strncmp(token,files[pos], strlen(token)) == 0)
+  if (strncmp(search_string,files[pos], strlen(search_string)) == 0)
   {
    matches++;
    match = malloc(strlen(files[pos]) + 2);
@@ -225,25 +299,47 @@ int get_auto_line(char** line)
  }
  else if (matches == 1)
  {
-  char* tmp = malloc(strlen(cdir) + strlen(match) + 2);
-  strcpy(tmp, cdir);
+  char* tmp = malloc(strlen(search_dir) + strlen(match) + 2);
+  strcpy(tmp, search_dir);
   strcat(strcat(tmp, "/"),match);
   struct stat path_stat;
-  stat(tmp, &path_stat); 
+  stat(tmp, &path_stat);
+
+  if (strchr(match, ' ') != NULL) //surround with "" if there is a space
+  {
+   char* q1;
+   q1[0] = '\"';
+   q1[1] = '\0';
+   match = strcat(strcat(q1, match), "\"");
+  }
+
   if (access(tmp, X_OK) == 0 && S_ISREG(path_stat.st_mode))
   {
-   int tempms = 3 + strlen(match);
-   char* tempm = malloc(tempms);
-   tempm[0] = '.';
-   tempm[1] = '/';
-   tempm[2] = '\0';
+   if (strcmp(search_dir,cdir) == 0) //only add the ./ if in the current context
+   {
+    int tempms = 3 + strlen(match);
+    char* tempm = malloc(tempms);
+    tempm[0] = '.';
+    tempm[1] = '/';
+    tempm[2] = '\0';
   
-   strcat(tempm, match);
-   free(match);
-   match = tempm;
-  } 
-  free(tmp);
-  swap_last_token(line, match);
+    strcat(tempm, match);
+    //free(match);
+    match = tempm;
+   }
+  }
+  else if (S_ISDIR(path_stat.st_mode))
+  {
+   strcat(match,"/");
+  }
+  //free(tmp);
+ 
+  if (search_type == 1)
+   swap_last_token(line, strcat(search_dir + strlen(cdir) + 1, match));
+  else if (search_type == 2)
+   swap_last_token(line, strcat(search_dir, match));
+  else
+   swap_last_token(line, match);
   return strlen(*line);
   }
 }
@@ -737,7 +833,10 @@ char* read_line()
 
    //check if there is nothing and continue (to prevent blocking on getchar())
    if (is_ready(0) == 0)
+   {
+    usleep(1000); //reduce cpu usage
     continue;
+   }
 
    c = getchar();
 
