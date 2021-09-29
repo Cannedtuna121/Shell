@@ -286,7 +286,8 @@ int get_auto_line(char** line)
  else if (matches == 0)
  {
   char* dever = ":";
-  char* syspaths = strdup(strtok(getenv("PATH"),dever));
+  char* path = strdup(getenv("PATH"));
+  char* syspaths = strdup(strtok(path,dever));
   
   while(syspaths != NULL)
   {
@@ -306,6 +307,7 @@ int get_auto_line(char** line)
        free(sysfiles[i]);
        i++;
       }
+      free(path);
       free(sysfiles);
       free(syspaths);
       free(token);
@@ -337,6 +339,7 @@ int get_auto_line(char** line)
   free(syspaths);
   free(token);
   free(search_dir);
+  free(path);
   return strlen(*line);
 
   
