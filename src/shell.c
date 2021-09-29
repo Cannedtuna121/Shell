@@ -136,6 +136,13 @@ char *get_last_token(char* line)
   last = tokens[pos];
   pos++;
  }
+ pos = 0;
+ while(tokens[pos] != last)
+ {
+  free(tokens[pos]);
+  pos++;
+ }
+ free(tokens);
  return last;
 }
 
@@ -246,6 +253,7 @@ int get_auto_line(char** line)
  char **files = get_files_in_dir(search_dir);
  if (files == NULL)
  {
+  free(token);
   return strlen(*line);
  }
  int pos = 0;
@@ -263,6 +271,7 @@ int get_auto_line(char** line)
  }
  if (matches > 1)
  {
+  free(token);
   return strlen(*line);
  }
  else if (matches == 0)
@@ -288,6 +297,7 @@ int get_auto_line(char** line)
     }
     pos++;
    }
+
    free(syspaths);
    free_string_array(&sysfiles);
    char* tmp = strtok(NULL, dever);
@@ -304,6 +314,7 @@ int get_auto_line(char** line)
   {
    swap_last_token(line, match);
   }
+  free(token);
   return strlen(*line);
 
   
@@ -344,6 +355,7 @@ int get_auto_line(char** line)
    strcat(match,"/");
   }
   free(tmp);
+  free(token);
  
   if (search_type == 1)
    swap_last_token(line, strcat(search_dir + strlen(cdir) + 1, match));
