@@ -106,14 +106,14 @@ char **get_files_in_dir(char* path)
 
  struct dirent *de;
  char** files = malloc(64 * sizeof(char*));
- int bufsize = 64;
+ int bufsize = 64 * sizeof(char*);
  int pos = 0;
 
  while((de=readdir(dr)) != NULL)
  {
   files[pos] = strdup(de->d_name);
   pos++;
-  chk_alloc_strar_mem(&files, pos, &bufsize, 64);
+  chk_alloc_strar_mem(&files, pos * sizeof(char*), &bufsize, 64 * sizeof(char*));
  }
 
  files[pos] = NULL;
@@ -154,6 +154,7 @@ int swap_last_token(char** line, char* tok)
  {
   pos++;
  }
+ free(tokens[pos-1]);
  tokens[pos-1] = tok;
  pos = 0;
  int bufsize = line_buffer_start_size;
@@ -169,6 +170,8 @@ int swap_last_token(char** line, char* tok)
    tokpos++;
    chk_alloc_str_mem(&nline, linepos, &bufsize, line_buffer_start_size);
   }
+  free(tokens[pos]);
+
   nline[linepos] = ' ';
   linepos++;
   chk_alloc_str_mem(&nline, linepos, &bufsize, line_buffer_start_size);
@@ -182,6 +185,9 @@ int swap_last_token(char** line, char* tok)
  {
  nline[linepos] = '\0';
  }
+ 
+ free(tokens);
+ free(*line);
  *line = nline;
  return bufsize;
 }
@@ -269,15 +275,18 @@ int get_auto_line(char** line)
   }
   pos++;
  }
+ free_string_array(&files);
+ free(search_string);
  if (matches > 1)
  {
+  free(search_dir);
   free(token);
   return strlen(*line);
  }
  else if (matches == 0)
  {
   char* dever = ":";
-  char* syspaths = strdup(strtok(strdup(getenv("PATH")),dever));
+  char* syspaths = strdup(strtok(getenv("PATH"),dever));
   
   while(syspaths != NULL)
   {
@@ -291,6 +300,17 @@ int get_auto_line(char** line)
      if(matches > 1)
      {
       //printf("too many matches");
+      int i = 0;
+      while(sysfiles[i] != NULL)
+      {
+       free(sysfiles[i]);
+       i++;
+      }
+      free(sysfiles);
+      free(syspaths);
+      free(token);
+      free(search_dir);
+      free(match);
       return strlen(*line);
      }
      match = strdup(sysfiles[pos]);
@@ -314,7 +334,9 @@ int get_auto_line(char** line)
   {
    swap_last_token(line, match);
   }
+  free(syspaths);
   free(token);
+  free(search_dir);
   return strlen(*line);
 
   
@@ -363,6 +385,8 @@ int get_auto_line(char** line)
    swap_last_token(line, strcat(search_dir, match));
   else
    swap_last_token(line, match);
+
+  free(search_dir);
   return strlen(*line);
   }
 }
@@ -773,6 +797,10 @@ char** get_tokens(char *line)
     tokens_position++;
     chk_alloc_strar_mem(&tokens, tokens_position, &bufsize, token_buffer_size);
    }
+   else
+   {
+    free(token);
+   }
 
    small_token_bufsize = small_token_buffer_size;
    token = malloc(sizeof(char) * small_token_bufsize);
@@ -829,6 +857,14 @@ char** get_tokens(char *line)
     tokens_position++;
     chk_alloc_strar_mem(&tokens, tokens_position, &bufsize, token_buffer_size);
    }
+   else
+   {
+    free(token);
+   }
+
+   token = malloc(sizeof(char) * small_token_bufsize);
+   token[0] = '\0';
+   token_position = 0;
 
    //reget the old tokens and put them inside the new ones if we can
    if (cmdhist[1] != NULL && strstr(cmdhist[1], "!") == NULL)
