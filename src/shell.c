@@ -270,8 +270,11 @@ int get_auto_line(char** line)
   if (strncmp(search_string,files[pos], strlen(search_string)) == 0)
   {
    matches++;
+   if (matches < 2)
+   {
    match = malloc(strlen(files[pos]) + 2);
    strcpy(match, files[pos]);
+   }
   }
   pos++;
  }
@@ -281,6 +284,7 @@ int get_auto_line(char** line)
  {
   free(search_dir);
   free(token);
+  free(match);
   return strlen(*line);
  }
  else if (matches == 0)
