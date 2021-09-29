@@ -28,7 +28,7 @@ static struct termios old, cus; //used for terminal stuff
 
 void chk_alloc_strar_mem(char ***string, int posused, int *buffersize, int chunksize)
 {
-  if (posused > *buffersize)
+  if (posused >= *buffersize - 1)
   {
     *buffersize += chunksize;
     *string = realloc(*string, *buffersize * sizeof(char*));
@@ -44,7 +44,7 @@ void chk_alloc_strar_mem(char ***string, int posused, int *buffersize, int chunk
 
 void chk_alloc_str_mem(char **string, int posused, int *buffersize, int chunksize)
 {
-  if (posused > *buffersize)
+  if (posused >= *buffersize - 1)
   {
     *buffersize += chunksize;
     *string = realloc(*string, *buffersize * sizeof(char));
@@ -55,6 +55,20 @@ void chk_alloc_str_mem(char **string, int posused, int *buffersize, int chunksiz
     }
 
   }
+
+}
+
+void free_string_array(char ***string)
+{
+ int i = 0;
+ char **string_arr = *string;
+ while (string_arr[i] != NULL)
+ {
+  free(string_arr[i]);
+  i++;
+ }
+ free(string_arr[i]);
+ free(string_arr);
 
 }
 
@@ -151,7 +165,7 @@ int swap_last_token(char** line, char* tok)
   nline[linepos] = ' ';
   linepos++;
   chk_alloc_str_mem(&nline, linepos, &bufsize, line_buffer_start_size);
- pos++;
+  pos++;
  }
  if (nline[linepos - 2] == '/')
  {
@@ -260,14 +274,10 @@ int get_auto_line(char** line)
   {
    char **sysfiles = get_files_in_dir(syspaths);
    pos = 0;
-   //printf("\n%s\n", token); 
    while(sysfiles[pos] != NULL)
    {
-    //printf("\n%d %s %s\n", pos, sysfiles[pos], syspaths);
     if (strncmp(token,sysfiles[pos], strlen(token)) == 0)
     {
-     //printf("\n%s\n", sysfiles[pos]);
-     //printf("\nMATCH\n");
      matches++;
      if(matches > 1)
      {
@@ -279,6 +289,7 @@ int get_auto_line(char** line)
     pos++;
    }
    free(syspaths);
+   free_string_array(&sysfiles);
    char* tmp = strtok(NULL, dever);
    if (tmp == NULL)
    {
@@ -324,7 +335,7 @@ int get_auto_line(char** line)
     tempm[2] = '\0';
   
     strcat(tempm, match);
-    //free(match);
+    free(match);
     match = tempm;
    }
   }
@@ -332,7 +343,7 @@ int get_auto_line(char** line)
   {
    strcat(match,"/");
   }
-  //free(tmp);
+  free(tmp);
  
   if (search_type == 1)
    swap_last_token(line, strcat(search_dir + strlen(cdir) + 1, match));
@@ -418,15 +429,32 @@ int pipe_launch(char **tokens)
 {
  int pos = 0;
  int pipecount = 0;
+ int count = 0;
  while(tokens[pos] != NULL)
  {
   if (strcmp(tokens[pos], "|") == 0)
   {
+   if (count == 0)
+   {
+    fprintf(stderr, "%s", "No command given after pipe\n");
+    return -1;
+   }
    pipecount++;
+   count = 0;
+  }
+  else
+  {
+   count++;
   }
   pos++;
  }
  
+ if (count == 0)
+ {
+  fprintf(stderr, "%s", "No command given after pipe\n");
+  return -1;
+ }
+
  char ***args = malloc((pipecount+1) * sizeof(char**));
  for (int i = 0; i < pipecount+1;i++) 
  {
@@ -439,6 +467,8 @@ int pipe_launch(char **tokens)
  {
   if (strcmp(tokens[pos], "|") == 0)
   {
+   args[argi][tokeni] = NULL;
+   
    argi++;
    tokeni = 0;
   }
@@ -449,6 +479,8 @@ int pipe_launch(char **tokens)
   }
   pos++;
  }
+ args[argi][tokeni] = NULL;
+
  int **pipes = malloc((pipecount+1) * sizeof(int*));
  
  for (int i = 0; i < pipecount+1;i++)
@@ -518,7 +550,14 @@ int pipe_launch(char **tokens)
     }while (!WIFEXITED(status) && !WIFSIGNALED(status));
   }
 
+ for (int i = 0; i < pipecount+1; i++)
+ {
+  free(args[i]);
+  free(pipes[i]);
+ }
  free(args);
+ free(pipes);
+ free(pids);
  return 1;
 }
 
@@ -691,6 +730,7 @@ char** get_tokens(char *line)
  int tokens_position = 0;
  int small_token_bufsize = small_token_buffer_size;
  token = malloc(sizeof(char) * small_token_bufsize);
+ token[0] = '\0';
  int in_quotations = 0;
  do 
   {
@@ -753,6 +793,10 @@ char** get_tokens(char *line)
     tokens_position++;
     chk_alloc_strar_mem(&tokens, tokens_position, &bufsize, token_buffer_size);
    }
+   else
+   {
+    free(token);
+   }
    small_token_bufsize = small_token_buffer_size;
    token = malloc(sizeof(char) * small_token_bufsize);
    token_position = 0;
@@ -806,7 +850,7 @@ char** get_tokens(char *line)
  }while(c != '\0'); 
  //putting a null terminator on the tokens array
  tokens[tokens_position] = NULL;
-
+ free(token);
 
 
  return tokens;
@@ -925,12 +969,12 @@ char* read_line()
        {
         printf("\b \b");
         position--;
-        buffer[position] = '-';
+        buffer[position] = '\0';
        }
        //get rid of the memory of buffer
        free(buffer);
        //get memory for the newly sized buffer
-       buffer = malloc(sizeof(char) * strlen(cmdhist[cmdhistpos]));
+       buffer = malloc(sizeof(char) * (strlen(cmdhist[cmdhistpos]) + 1));
        if (!buffer) 
        {
         fprintf(stderr, "Failed to allocate memory.");
@@ -1075,8 +1119,7 @@ void shell_loop()
   executing = 0;
   change_termios(0);
 
-   
-  free(tokens);
+  free_string_array(&tokens);
   }
   else
   {
